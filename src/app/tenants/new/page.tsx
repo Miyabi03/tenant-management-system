@@ -21,6 +21,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 interface Room {
   id: string;
   room_number: string;
+  room_type: string | null;
   status: string;
   property: {
     id: string;
@@ -33,14 +34,8 @@ export default function NewTenantPage() {
   const [form, setForm] = useState({
     room_id: '',
     name: '',
-    name_kana: '',
-    email: '',
-    phone: '',
-    emergency_contact: '',
-    emergency_phone: '',
+    department: '', // 所属部署
     move_in_date: '',
-    contract_start_date: '',
-    contract_end_date: '',
     notes: '',
   });
   const [loading, setLoading] = useState(true);
@@ -53,7 +48,7 @@ export default function NewTenantPage() {
     const fetchRooms = async () => {
       const { data, error } = await supabase
         .from('rooms')
-        .select('id, room_number, status, property:properties(id, name)')
+        .select('id, room_number, room_type, status, property:properties(id, name)')
         .eq('status', 'vacant')
         .order('room_number');
 
@@ -80,14 +75,10 @@ export default function NewTenantPage() {
       .insert({
         room_id: form.room_id || null,
         name: form.name,
-        name_kana: form.name_kana || null,
-        email: form.email || null,
-        phone: form.phone || null,
-        emergency_contact: form.emergency_contact || null,
-        emergency_phone: form.emergency_phone || null,
+        name_kana: form.department || null, // 所属部署をname_kanaに保存
         move_in_date: form.move_in_date,
-        contract_start_date: form.contract_start_date,
-        contract_end_date: form.contract_end_date,
+        contract_start_date: form.move_in_date,
+        contract_end_date: '2099-12-31', // デフォルト値
         notes: form.notes || null,
       })
       .select()
@@ -161,6 +152,7 @@ export default function NewTenantPage() {
                     {rooms.map((room) => (
                       <SelectItem key={room.id} value={room.id}>
                         {room.property.name} - {room.room_number}号室
+                        {room.room_type && ` ベッド${room.room_type}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -173,130 +165,44 @@ export default function NewTenantPage() {
               </div>
 
               {/* 基本情報 */}
-              <div className="space-y-4">
-                <h3 className="font-medium">基本情報</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">氏名 *</Label>
-                    <Input
-                      id="name"
-                      value={form.name}
-                      onChange={(e) =>
-                        setForm({ ...form, name: e.target.value })
-                      }
-                      placeholder="山田 太郎"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="name_kana">氏名（カナ）</Label>
-                    <Input
-                      id="name_kana"
-                      value={form.name_kana}
-                      onChange={(e) =>
-                        setForm({ ...form, name_kana: e.target.value })
-                      }
-                      placeholder="ヤマダ タロウ"
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">名前 *</Label>
+                  <Input
+                    id="name"
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm({ ...form, name: e.target.value })
+                    }
+                    placeholder="山田 太郎"
+                    required
+                  />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">メールアドレス</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={form.email}
-                      onChange={(e) =>
-                        setForm({ ...form, email: e.target.value })
-                      }
-                      placeholder="example@email.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">電話番号</Label>
-                    <Input
-                      id="phone"
-                      value={form.phone}
-                      onChange={(e) =>
-                        setForm({ ...form, phone: e.target.value })
-                      }
-                      placeholder="090-1234-5678"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department">所属部署</Label>
+                  <Input
+                    id="department"
+                    value={form.department}
+                    onChange={(e) =>
+                      setForm({ ...form, department: e.target.value })
+                    }
+                    placeholder="営業部"
+                  />
                 </div>
               </div>
 
-              {/* 緊急連絡先 */}
-              <div className="space-y-4">
-                <h3 className="font-medium">緊急連絡先</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="emergency_contact">緊急連絡先（氏名）</Label>
-                    <Input
-                      id="emergency_contact"
-                      value={form.emergency_contact}
-                      onChange={(e) =>
-                        setForm({ ...form, emergency_contact: e.target.value })
-                      }
-                      placeholder="山田 花子"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="emergency_phone">緊急連絡先（電話番号）</Label>
-                    <Input
-                      id="emergency_phone"
-                      value={form.emergency_phone}
-                      onChange={(e) =>
-                        setForm({ ...form, emergency_phone: e.target.value })
-                      }
-                      placeholder="080-1234-5678"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 契約情報 */}
-              <div className="space-y-4">
-                <h3 className="font-medium">契約情報</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="move_in_date">入居日 *</Label>
-                    <Input
-                      id="move_in_date"
-                      type="date"
-                      value={form.move_in_date}
-                      onChange={(e) =>
-                        setForm({ ...form, move_in_date: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contract_start_date">契約開始日 *</Label>
-                    <Input
-                      id="contract_start_date"
-                      type="date"
-                      value={form.contract_start_date}
-                      onChange={(e) =>
-                        setForm({ ...form, contract_start_date: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contract_end_date">契約終了日 *</Label>
-                    <Input
-                      id="contract_end_date"
-                      type="date"
-                      value={form.contract_end_date}
-                      onChange={(e) =>
-                        setForm({ ...form, contract_end_date: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                </div>
+              {/* 入居日 */}
+              <div className="space-y-2">
+                <Label htmlFor="move_in_date">入居日 *</Label>
+                <Input
+                  id="move_in_date"
+                  type="date"
+                  value={form.move_in_date}
+                  onChange={(e) =>
+                    setForm({ ...form, move_in_date: e.target.value })
+                  }
+                  required
+                />
               </div>
 
               {/* 備考 */}

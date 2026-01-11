@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge'; // 入退去履歴で使用
 import {
   Table,
   TableBody,
@@ -24,23 +24,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Eye, Edit, Trash2, History } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 interface Tenant {
   id: string;
   name: string;
-  name_kana: string | null;
-  email: string | null;
-  phone: string | null;
+  name_kana: string | null; // 所属部署として使用
   move_in_date: string;
   move_out_date: string | null;
-  contract_start_date: string;
-  contract_end_date: string;
+  notes: string | null;
   room: {
     id: string;
     room_number: string;
+    room_type: string | null;
     property: {
       id: string;
       name: string;
@@ -79,14 +77,25 @@ export default function TenantsPage() {
   const fetchTenants = async () => {
     const { data, error } = await supabase
       .from('tenants')
-      .select('*, room:rooms(id, room_number, property:properties(id, name))')
+      .select('id, name, name_kana, move_in_date, move_out_date, notes, room:rooms(id, room_number, room_type, property:properties(id, name))')
       .is('move_out_date', null)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching tenants:', error);
     } else {
-      setTenants(data || []);
+      // Supabaseのリレーションは配列で返されるため、最初の要素を取り出す
+      const formattedData: Tenant[] = (data || []).map((item) => {
+        const roomData = Array.isArray(item.room) ? item.room[0] : item.room;
+        return {
+          ...item,
+          room: roomData ? {
+            ...roomData,
+            property: Array.isArray(roomData.property) ? roomData.property[0] : roomData.property,
+          } : null,
+        };
+      });
+      setTenants(formattedData);
     }
   };
 
@@ -128,14 +137,6 @@ export default function TenantsPage() {
     setDeleteId(null);
   };
 
-  const isContractExpiring = (endDate: string) => {
-    const end = new Date(endDate);
-    const now = new Date();
-    const threeMonthsLater = new Date();
-    threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-    return end <= threeMonthsLater && end >= now;
-  };
-
   if (loading) {
     return (
       <AdminLayout title="入居者管理">
@@ -169,11 +170,11 @@ export default function TenantsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>氏名</TableHead>
+                      <TableHead>名前</TableHead>
+                      <TableHead>所属部署</TableHead>
                       <TableHead>物件 / 部屋</TableHead>
-                      <TableHead>連絡先</TableHead>
                       <TableHead>入居日</TableHead>
-                      <TableHead>契約期間</TableHead>
+                      <TableHead>備考</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -190,15 +191,11 @@ export default function TenantsPage() {
                     ) : (
                       tenants.map((tenant) => (
                         <TableRow key={tenant.id}>
+                          <TableCell className="font-medium">
+                            {tenant.name}
+                          </TableCell>
                           <TableCell>
-                            <div>
-                              <div className="font-medium">{tenant.name}</div>
-                              {tenant.name_kana && (
-                                <div className="text-sm text-gray-500">
-                                  {tenant.name_kana}
-                                </div>
-                              )}
-                            </div>
+                            {tenant.name_kana || '-'}
                           </TableCell>
                           <TableCell>
                             {tenant.room ? (
@@ -206,6 +203,7 @@ export default function TenantsPage() {
                                 <div>{tenant.room.property.name}</div>
                                 <div className="text-sm text-gray-500">
                                   {tenant.room.room_number}号室
+                                  {tenant.room.room_type && ` ベッド${tenant.room.room_type}`}
                                 </div>
                               </div>
                             ) : (
@@ -213,43 +211,15 @@ export default function TenantsPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm">
-                              {tenant.email && <div>{tenant.email}</div>}
-                              {tenant.phone && <div>{tenant.phone}</div>}
-                            </div>
-                          </TableCell>
-                          <TableCell>
                             {format(new Date(tenant.move_in_date), 'yyyy/MM/dd', {
                               locale: ja,
                             })}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">
-                                {format(
-                                  new Date(tenant.contract_end_date),
-                                  'yyyy/MM/dd',
-                                  { locale: ja }
-                                )}
-                                まで
-                              </span>
-                              {isContractExpiring(tenant.contract_end_date) && (
-                                <Badge variant="destructive">更新間近</Badge>
-                              )}
-                            </div>
+                          <TableCell className="max-w-[200px] truncate text-gray-500">
+                            {tenant.notes || '-'}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Link href={`/tenants/${tenant.id}`}>
-                                <Button variant="ghost" size="sm">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </Link>
-                              <Link href={`/tenants/${tenant.id}/edit`}>
-                                <Button variant="ghost" size="sm">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </Link>
                               <Button
                                 variant="ghost"
                                 size="sm"

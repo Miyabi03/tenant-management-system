@@ -41,46 +41,59 @@ import {
   MapPin,
   Building,
   Loader2,
+  UserPlus,
+  UserMinus,
 } from 'lucide-react';
-import { Property, Room } from '@/types';
+import { Property, Room, Tenant } from '@/types';
 
 interface RoomFormData {
   room_number: string;
   floor: string;
-  rent: string;
-  management_fee: string;
-  deposit: string;
-  key_money: string;
-  room_type: string;
-  area: string;
+  bed_number: string;
   status: string;
-  description: string;
+}
+
+interface TenantFormData {
+  name: string;
+  department: string;
+  move_in_date: string;
+  notes: string;
+}
+
+interface RoomWithTenant extends Room {
+  tenant?: Tenant | null;
 }
 
 const initialRoomForm: RoomFormData = {
   room_number: '',
   floor: '',
-  rent: '',
-  management_fee: '',
-  deposit: '',
-  key_money: '',
-  room_type: '',
-  area: '',
+  bed_number: '',
   status: 'vacant',
-  description: '',
+};
+
+const initialTenantForm: TenantFormData = {
+  name: '',
+  department: '',
+  move_in_date: '',
+  notes: '',
 };
 
 export default function PropertyDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [property, setProperty] = useState<Property | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<RoomWithTenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [roomForm, setRoomForm] = useState<RoomFormData>(initialRoomForm);
   const [deleteRoomId, setDeleteRoomId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 入居者登録用
+  const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
+  const [selectedRoomForTenant, setSelectedRoomForTenant] = useState<Room | null>(null);
+  const [tenantForm, setTenantForm] = useState<TenantFormData>(initialTenantForm);
+  const [moveOutRoomId, setMoveOutRoomId] = useState<string | null>(null);
   const supabase = createClient();
 
   const fetchProperty = async () => {
@@ -98,17 +111,36 @@ export default function PropertyDetailPage() {
   };
 
   const fetchRooms = async () => {
-    const { data, error } = await supabase
+    // 部屋情報を取得
+    const { data: roomsData, error: roomsError } = await supabase
       .from('rooms')
       .select('*')
       .eq('property_id', id)
+      .order('floor')
       .order('room_number');
 
-    if (error) {
-      console.error('Error fetching rooms:', error);
-    } else {
-      setRooms(data || []);
+    if (roomsError) {
+      console.error('Error fetching rooms:', roomsError);
+      return;
     }
+
+    // 各部屋の入居者情報を取得
+    const roomsWithTenants = await Promise.all(
+      (roomsData || []).map(async (room) => {
+        if (room.status === 'occupied') {
+          const { data: tenantData } = await supabase
+            .from('tenants')
+            .select('*')
+            .eq('room_id', room.id)
+            .is('move_out_date', null)
+            .single();
+          return { ...room, tenant: tenantData };
+        }
+        return { ...room, tenant: null };
+      })
+    );
+
+    setRooms(roomsWithTenants);
   };
 
   useEffect(() => {
@@ -127,14 +159,12 @@ export default function PropertyDetailPage() {
       property_id: id,
       room_number: roomForm.room_number,
       floor: roomForm.floor ? parseInt(roomForm.floor) : null,
-      rent: parseInt(roomForm.rent) || 0,
-      management_fee: parseInt(roomForm.management_fee) || 0,
-      deposit: parseInt(roomForm.deposit) || 0,
-      key_money: parseInt(roomForm.key_money) || 0,
-      room_type: roomForm.room_type || null,
-      area: roomForm.area ? parseFloat(roomForm.area) : null,
+      room_type: roomForm.bed_number || null, // ベッド番号をroom_typeに保存
       status: roomForm.status,
-      description: roomForm.description || null,
+      rent: 0,
+      management_fee: 0,
+      deposit: 0,
+      key_money: 0,
     };
 
     if (editingRoom) {
@@ -144,13 +174,19 @@ export default function PropertyDetailPage() {
         .eq('id', editingRoom.id);
 
       if (error) {
-        console.error('Error updating room:', error);
+        console.error('Error updating room:', error.message, error.details, error.hint);
+        alert(`更新エラー: ${error.message || 'RLSポリシーを確認してください'}`);
+        setSubmitting(false);
+        return;
       }
     } else {
       const { error } = await supabase.from('rooms').insert(roomData);
 
       if (error) {
-        console.error('Error creating room:', error);
+        console.error('Error creating room:', error.message, error.details, error.hint);
+        alert(`作成エラー: ${error.message || 'RLSポリシーを確認してください'}`);
+        setSubmitting(false);
+        return;
       }
     }
 
@@ -166,14 +202,8 @@ export default function PropertyDetailPage() {
     setRoomForm({
       room_number: room.room_number,
       floor: room.floor?.toString() || '',
-      rent: room.rent.toString(),
-      management_fee: room.management_fee.toString(),
-      deposit: room.deposit.toString(),
-      key_money: room.key_money.toString(),
-      room_type: room.room_type || '',
-      area: room.area?.toString() || '',
+      bed_number: room.room_type || '', // room_typeにベッド番号が入っている
       status: room.status,
-      description: room.description || '',
     });
     setRoomDialogOpen(true);
   };
@@ -191,12 +221,92 @@ export default function PropertyDetailPage() {
     setDeleteRoomId(null);
   };
 
+  // 入居者登録
+  const handleTenantSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRoomForTenant) return;
+    setSubmitting(true);
+
+    // 入居者を登録
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .insert({
+        room_id: selectedRoomForTenant.id,
+        name: tenantForm.name,
+        name_kana: tenantForm.department, // 所属部署をname_kanaに保存
+        move_in_date: tenantForm.move_in_date,
+        contract_start_date: tenantForm.move_in_date,
+        contract_end_date: '2099-12-31', // デフォルト値
+        notes: tenantForm.notes || null,
+      })
+      .select()
+      .single();
+
+    if (tenantError) {
+      console.error('Error creating tenant:', tenantError.message);
+      alert(`登録エラー: ${tenantError.message}`);
+      setSubmitting(false);
+      return;
+    }
+
+    // 部屋のステータスを更新
+    await supabase
+      .from('rooms')
+      .update({ status: 'occupied' })
+      .eq('id', selectedRoomForTenant.id);
+
+    // 入居履歴を追加
+    await supabase.from('move_histories').insert({
+      room_id: selectedRoomForTenant.id,
+      tenant_id: tenant.id,
+      move_type: 'in',
+      move_date: tenantForm.move_in_date,
+    });
+
+    setSubmitting(false);
+    setTenantDialogOpen(false);
+    setSelectedRoomForTenant(null);
+    setTenantForm(initialTenantForm);
+    fetchRooms();
+  };
+
+  // 退去処理
+  const handleMoveOut = async () => {
+    if (!moveOutRoomId) return;
+
+    const room = rooms.find((r) => r.id === moveOutRoomId);
+    if (!room?.tenant) return;
+
+    // 入居者の退去日を設定
+    await supabase
+      .from('tenants')
+      .update({ move_out_date: new Date().toISOString().split('T')[0] })
+      .eq('id', room.tenant.id);
+
+    // 部屋のステータスを空きに変更
+    await supabase
+      .from('rooms')
+      .update({ status: 'vacant' })
+      .eq('id', moveOutRoomId);
+
+    // 退去履歴を追加
+    await supabase.from('move_histories').insert({
+      room_id: moveOutRoomId,
+      tenant_id: room.tenant.id,
+      move_type: 'out',
+      move_date: new Date().toISOString().split('T')[0],
+    });
+
+    setMoveOutRoomId(null);
+    fetchRooms();
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'vacant':
-        return <Badge variant="destructive">空室</Badge>;
+        return <Badge variant="destructive">空き</Badge>;
       case 'occupied':
-        return <Badge variant="default">入居中</Badge>;
+        return <Badge variant="default">使用中</Badge>;
       case 'reserved':
         return <Badge variant="secondary">予約済</Badge>;
       default:
@@ -271,27 +381,21 @@ export default function PropertyDetailPage() {
                 <p className="text-sm text-gray-500">稼働状況</p>
                 <p className="flex items-center gap-2">
                   <span>
-                    {rooms.length}室中 {rooms.length - vacantRooms}室入居中
+                    {rooms.length}ベッド中 {rooms.length - vacantRooms}ベッド使用中
                   </span>
                   <Badge variant={occupancyRate >= 80 ? 'default' : 'destructive'}>
                     稼働率 {occupancyRate}%
                   </Badge>
                 </p>
               </div>
-              {property.description && (
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">説明</p>
-                  <p>{property.description}</p>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* 部屋一覧 */}
+        {/* 部屋/ベッド一覧 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>部屋一覧</CardTitle>
+            <CardTitle>部屋・ベッド一覧</CardTitle>
             <Button
               onClick={() => {
                 setEditingRoom(null);
@@ -300,18 +404,18 @@ export default function PropertyDetailPage() {
               }}
             >
               <Plus className="h-4 w-4 mr-2" />
-              部屋を追加
+              追加
             </Button>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>階数</TableHead>
                   <TableHead>部屋番号</TableHead>
-                  <TableHead>間取り</TableHead>
-                  <TableHead className="text-right">家賃</TableHead>
-                  <TableHead className="text-right">管理費</TableHead>
+                  <TableHead>ベッド番号</TableHead>
                   <TableHead className="text-center">ステータス</TableHead>
+                  <TableHead>入居者</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -325,24 +429,49 @@ export default function PropertyDetailPage() {
                 ) : (
                   rooms.map((room) => (
                     <TableRow key={room.id}>
+                      <TableCell>{room.floor || '-'}F</TableCell>
                       <TableCell className="font-medium">
                         {room.room_number}
                       </TableCell>
-                      <TableCell>
-                        {room.room_type || '-'}
-                        {room.area && ` (${room.area}㎡)`}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {room.rent.toLocaleString()}円
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {room.management_fee.toLocaleString()}円
-                      </TableCell>
+                      <TableCell>{room.room_type || '-'}</TableCell>
                       <TableCell className="text-center">
                         {getStatusBadge(room.status)}
                       </TableCell>
+                      <TableCell>
+                        {room.tenant ? (
+                          <div>
+                            <p className="font-medium">{room.tenant.name}</p>
+                            <p className="text-sm text-gray-500">{room.tenant.name_kana}</p>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {room.status === 'vacant' ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRoomForTenant(room);
+                                setTenantForm(initialTenantForm);
+                                setTenantDialogOpen(true);
+                              }}
+                            >
+                              <UserPlus className="h-4 w-4 mr-1" />
+                              入居
+                            </Button>
+                          ) : room.status === 'occupied' && room.tenant ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setMoveOutRoomId(room.id)}
+                            >
+                              <UserMinus className="h-4 w-4 mr-1" />
+                              退去
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -370,26 +499,14 @@ export default function PropertyDetailPage() {
 
       {/* 部屋登録/編集ダイアログ */}
       <Dialog open={roomDialogOpen} onOpenChange={setRoomDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingRoom ? '部屋を編集' : '部屋を追加'}
+              {editingRoom ? '編集' : '部屋・ベッドを追加'}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleRoomSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="room_number">部屋番号 *</Label>
-                <Input
-                  id="room_number"
-                  value={roomForm.room_number}
-                  onChange={(e) =>
-                    setRoomForm({ ...roomForm, room_number: e.target.value })
-                  }
-                  placeholder="例：101"
-                  required
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="floor">階数</Label>
                 <Input
@@ -403,76 +520,28 @@ export default function PropertyDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="room_type">間取り</Label>
+                <Label htmlFor="room_number">部屋番号 *</Label>
                 <Input
-                  id="room_type"
-                  value={roomForm.room_type}
+                  id="room_number"
+                  value={roomForm.room_number}
                   onChange={(e) =>
-                    setRoomForm({ ...roomForm, room_type: e.target.value })
+                    setRoomForm({ ...roomForm, room_number: e.target.value })
                   }
-                  placeholder="例：1K"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="area">面積 (㎡)</Label>
-                <Input
-                  id="area"
-                  type="number"
-                  step="0.01"
-                  value={roomForm.area}
-                  onChange={(e) =>
-                    setRoomForm({ ...roomForm, area: e.target.value })
-                  }
-                  placeholder="例：25.5"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="rent">家賃 (円) *</Label>
-                <Input
-                  id="rent"
-                  type="number"
-                  value={roomForm.rent}
-                  onChange={(e) =>
-                    setRoomForm({ ...roomForm, rent: e.target.value })
-                  }
-                  placeholder="例：80000"
+                  placeholder="例：101"
                   required
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="management_fee">管理費 (円)</Label>
+                <Label htmlFor="bed_number">ベッド番号</Label>
                 <Input
-                  id="management_fee"
-                  type="number"
-                  value={roomForm.management_fee}
+                  id="bed_number"
+                  value={roomForm.bed_number}
                   onChange={(e) =>
-                    setRoomForm({ ...roomForm, management_fee: e.target.value })
+                    setRoomForm({ ...roomForm, bed_number: e.target.value })
                   }
-                  placeholder="例：5000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="deposit">敷金 (円)</Label>
-                <Input
-                  id="deposit"
-                  type="number"
-                  value={roomForm.deposit}
-                  onChange={(e) =>
-                    setRoomForm({ ...roomForm, deposit: e.target.value })
-                  }
-                  placeholder="例：80000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="key_money">礼金 (円)</Label>
-                <Input
-                  id="key_money"
-                  type="number"
-                  value={roomForm.key_money}
-                  onChange={(e) =>
-                    setRoomForm({ ...roomForm, key_money: e.target.value })
-                  }
-                  placeholder="例：80000"
+                  placeholder="例：A"
                 />
               </div>
               <div className="space-y-2">
@@ -487,24 +556,12 @@ export default function PropertyDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="vacant">空室</SelectItem>
-                    <SelectItem value="occupied">入居中</SelectItem>
+                    <SelectItem value="vacant">空き</SelectItem>
+                    <SelectItem value="occupied">使用中</SelectItem>
                     <SelectItem value="reserved">予約済</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="room_description">説明</Label>
-              <textarea
-                id="room_description"
-                value={roomForm.description}
-                onChange={(e) =>
-                  setRoomForm({ ...roomForm, description: e.target.value })
-                }
-                placeholder="部屋の説明を入力してください"
-                className="w-full min-h-[80px] px-3 py-2 border rounded-md"
-              />
             </div>
             <DialogFooter>
               <Button
@@ -533,9 +590,9 @@ export default function PropertyDetailPage() {
       <Dialog open={!!deleteRoomId} onOpenChange={() => setDeleteRoomId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>部屋を削除しますか？</DialogTitle>
+            <DialogTitle>削除しますか？</DialogTitle>
             <DialogDescription>
-              この操作は取り消せません。部屋に関連するデータも削除されます。
+              この操作は取り消せません。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -544,6 +601,115 @@ export default function PropertyDetailPage() {
             </Button>
             <Button variant="destructive" onClick={handleDeleteRoom}>
               削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 入居者登録ダイアログ */}
+      <Dialog open={tenantDialogOpen} onOpenChange={setTenantDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>入居者登録</DialogTitle>
+            <DialogDescription>
+              {selectedRoomForTenant && (
+                <>
+                  {selectedRoomForTenant.floor}F {selectedRoomForTenant.room_number}号室
+                  {selectedRoomForTenant.room_type && ` ベッド${selectedRoomForTenant.room_type}`}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleTenantSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenant_name">名前 *</Label>
+              <Input
+                id="tenant_name"
+                value={tenantForm.name}
+                onChange={(e) =>
+                  setTenantForm({ ...tenantForm, name: e.target.value })
+                }
+                placeholder="山田 太郎"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="department">所属部署</Label>
+              <Input
+                id="department"
+                value={tenantForm.department}
+                onChange={(e) =>
+                  setTenantForm({ ...tenantForm, department: e.target.value })
+                }
+                placeholder="営業部"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="move_in_date">入居日 *</Label>
+              <Input
+                id="move_in_date"
+                type="date"
+                value={tenantForm.move_in_date}
+                onChange={(e) =>
+                  setTenantForm({ ...tenantForm, move_in_date: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tenant_notes">備考</Label>
+              <textarea
+                id="tenant_notes"
+                value={tenantForm.notes}
+                onChange={(e) =>
+                  setTenantForm({ ...tenantForm, notes: e.target.value })
+                }
+                placeholder="備考を入力してください"
+                className="w-full min-h-[80px] px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTenantDialogOpen(false)}
+              >
+                キャンセル
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    登録中...
+                  </>
+                ) : (
+                  '登録'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 退去確認ダイアログ */}
+      <Dialog open={!!moveOutRoomId} onOpenChange={() => setMoveOutRoomId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>退去処理</DialogTitle>
+            <DialogDescription>
+              {moveOutRoomId && rooms.find((r) => r.id === moveOutRoomId)?.tenant && (
+                <>
+                  {rooms.find((r) => r.id === moveOutRoomId)?.tenant?.name}さんの退去処理を行いますか？
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveOutRoomId(null)}>
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={handleMoveOut}>
+              退去処理を実行
             </Button>
           </DialogFooter>
         </DialogContent>
