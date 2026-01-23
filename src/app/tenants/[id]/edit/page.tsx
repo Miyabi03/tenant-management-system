@@ -127,13 +127,14 @@ export default function EditTenantPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="name_kana">氏名（カナ）</Label>
+                  <Label htmlFor="name_kana">所属部署</Label>
                   <Input
                     id="name_kana"
                     value={form.name_kana}
                     onChange={(e) =>
                       setForm({ ...form, name_kana: e.target.value })
                     }
+                    placeholder="例: 営業、事業本部"
                   />
                 </div>
               </div>
