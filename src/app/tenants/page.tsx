@@ -126,11 +126,22 @@ export default function TenantsPage() {
   const handleDelete = async () => {
     if (!deleteId) return;
 
+    // 削除前に入居者の部屋情報を取得
+    const tenantToDelete = tenants.find((t) => t.id === deleteId);
+    const roomId = tenantToDelete?.room?.id;
+
     const { error } = await supabase.from('tenants').delete().eq('id', deleteId);
 
     if (error) {
       console.error('Error deleting tenant:', error);
     } else {
+      // 部屋のステータスを空室に戻す
+      if (roomId) {
+        await supabase
+          .from('rooms')
+          .update({ status: 'vacant' })
+          .eq('id', roomId);
+      }
       fetchTenants();
       fetchMoveHistories();
     }
