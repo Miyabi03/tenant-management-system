@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -94,7 +94,7 @@ export default function PropertyDetailPage() {
   const [selectedRoomForTenant, setSelectedRoomForTenant] = useState<Room | null>(null);
   const [tenantForm, setTenantForm] = useState<TenantFormData>(initialTenantForm);
   const [moveOutRoomId, setMoveOutRoomId] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchProperty = async () => {
     const { data, error } = await supabase

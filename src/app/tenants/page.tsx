@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
@@ -72,7 +72,7 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('tenants');
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchTenants = async () => {
     const { data, error } = await supabase

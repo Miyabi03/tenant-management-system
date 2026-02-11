@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
@@ -100,7 +100,7 @@ export default function MaintenancePage() {
     contractor: '',
     notes: '',
   });
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchMaintenances = async () => {
     let query = supabase

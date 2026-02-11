@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
 import { Button } from '@/components/ui/button';
@@ -71,7 +71,7 @@ export default function InquiriesPage() {
   const [response, setResponse] = useState('');
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchInquiries = async () => {
     let query = supabase

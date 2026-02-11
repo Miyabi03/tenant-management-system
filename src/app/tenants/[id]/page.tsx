@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -68,7 +68,7 @@ export default function TenantDetailPage() {
   const [moveOutDate, setMoveOutDate] = useState('');
   const [moveOutNotes, setMoveOutNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchTenant = async () => {
     const { data, error } = await supabase

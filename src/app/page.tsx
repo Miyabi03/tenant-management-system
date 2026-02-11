@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ interface Property {
 export default function HomePage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     const fetchProperties = async () => {
@@ -49,7 +49,7 @@ export default function HomePage() {
     };
 
     fetchProperties();
-  }, [supabase]);
+  }, []);
 
   const getVacantRooms = (rooms: Property['rooms']) => {
     return rooms.filter((r) => r.status === 'vacant');

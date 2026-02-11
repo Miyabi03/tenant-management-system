@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,7 +49,7 @@ const COLORS = ['#22c55e', '#ef4444'];
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -143,7 +143,7 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
-  }, [supabase]);
+  }, []);
 
   if (loading) {
     return (

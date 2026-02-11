@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { AdminLayout } from '@/components/layout/admin-layout';
 import { Button } from '@/components/ui/button';
@@ -101,7 +101,7 @@ export default function FinancesPage() {
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchFinances = async () => {
     const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;

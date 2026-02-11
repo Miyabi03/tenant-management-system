@@ -18,7 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const menuItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'ダッシュボード' },
@@ -34,7 +34,7 @@ export function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { User } from '@supabase/supabase-js';
@@ -11,7 +11,7 @@ interface AdminHeaderProps {
 
 export function AdminHeader({ title }: AdminHeaderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     const getUser = async () => {
@@ -19,7 +19,7 @@ export function AdminHeader({ title }: AdminHeaderProps) {
       setUser(user);
     };
     getUser();
-  }, [supabase.auth]);
+  }, []);
 
   return (
     <header className="h-16 border-b bg-white flex items-center justify-between px-6">
