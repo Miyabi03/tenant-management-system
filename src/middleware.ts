@@ -34,13 +34,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // 管理者ページへのアクセスはログインが必要
-  if (request.nextUrl.pathname.startsWith('/dashboard') ||
-      request.nextUrl.pathname.startsWith('/properties') ||
-      request.nextUrl.pathname.startsWith('/tenants') ||
-      request.nextUrl.pathname.startsWith('/maintenance') ||
-      request.nextUrl.pathname.startsWith('/inquiries') ||
-      request.nextUrl.pathname.startsWith('/finances') ||
-      request.nextUrl.pathname.startsWith('/settings')) {
+  if (!request.nextUrl.pathname.startsWith('/auth/login')) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = '/auth/login';
@@ -60,6 +54,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/dashboard/:path*',
+    '/properties/:path*',
+    '/tenants/:path*',
+    '/maintenance/:path*',
+    '/inquiries/:path*',
+    '/finances/:path*',
+    '/settings/:path*',
+    '/auth/login',
   ],
 };
