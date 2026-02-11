@@ -33,19 +33,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 管理者ページへのアクセスはログインが必要
-  if (!request.nextUrl.pathname.startsWith('/auth/login')) {
-    if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/auth/login';
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // ログイン済みの場合、ログインページからダッシュボードへリダイレクト
-  if (request.nextUrl.pathname === '/auth/login' && user) {
+  // 未ログインの場合、ログインページへリダイレクト
+  if (!user) {
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = '/auth/login';
     return NextResponse.redirect(url);
   }
 
@@ -61,6 +52,5 @@ export const config = {
     '/inquiries/:path*',
     '/finances/:path*',
     '/settings/:path*',
-    '/auth/login',
   ],
 };
